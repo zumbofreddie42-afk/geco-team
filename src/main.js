@@ -482,7 +482,8 @@ function reportRows() {
 function viewReport() {
   const rows = reportRows();
   return shell(`
-    <div class="page-head"><div><p class="eyebrow">Situazione di oggi</p><h1>Report</h1></div><div class="head-actions"><button type="button" class="btn btn-primary" data-action="csv">Scarica (Excel)</button></div></div>
+    <div class="page-head"><div><p class="eyebrow">Situazione di oggi</p><h1>Report</h1></div><div class="head-actions"><button type="button" class="btn btn-ghost" data-action="backup">Scarica copia dei dati</button><button type="button" class="btn btn-primary" data-action="csv">Scarica (Excel)</button></div></div>
+    <p class="hint">Ogni lunedì mattina viene salvata automaticamente una copia di tutti i dati (si tengono le ultime 8). Con «Scarica copia dei dati» ne salvi una anche sul tuo computer.</p>
     <section class="card"><div class="table-wrap"><table class="report">
       <thead><tr><th scope="col">Persona</th><th scope="col">Attività</th><th scope="col">Completate</th><th scope="col">Aperte</th><th scope="col">In ritardo</th><th scope="col">Avanzamento</th></tr></thead>
       <tbody>${rows.map((r) => `<tr><th scope="row"><span class="rp">${avatar(r.p, 'sm')}${esc(r.p.name)}</span></th><td>${r.total}</td><td>${r.done}</td><td>${r.total - r.done}</td><td${r.late ? ' class="txt-late"' : ''}>${r.late}</td><td><span class="rp-bar">${bar(r.avg)}<b>${r.avg}%</b></span></td></tr>`).join('')}</tbody>
@@ -859,6 +860,13 @@ document.addEventListener('click', async (e) => {
     await act(async () => { await api.deleteUser(id); log(`ha tolto l’accesso a ${p.name}`); }, `Accesso tolto a ${p.name}.`);
   }
   else if (a === 'csv') downloadCsv();
+  else if (a === 'backup') {
+    try {
+      const data = await api.downloadBackup();
+      saveFile(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), `geco-team-backup-${new Date().toISOString().slice(0, 10)}.json`);
+      toast('Copia dei dati scaricata: conservala in un posto sicuro.');
+    } catch (err) { toast(err.message, true); }
+  }
   else if (a === 'close-modal') closeModal();
 });
 
@@ -911,14 +919,17 @@ function downloadCsv() {
     const pr = project(t.projectId);
     t.assignees.forEach((a) => lines.push([t.title, pr ? `${pr.code} · ${pr.name}` : '', nameOf(a.userId), prio(t.priority).label, t.due || '', a.progress].map(q).join(';')));
   });
-  const blob = new Blob([`﻿${lines.join('\r\n')}`], { type: 'text/csv;charset=utf-8' });
+  saveFile(new Blob([`﻿${lines.join('\r\n')}`], { type: 'text/csv;charset=utf-8' }), `report-team-geco-${new Date().toISOString().slice(0, 10)}.csv`);
+  toast('Report scaricato: si apre con Excel.');
+}
+
+function saveFile(blob, filename) {
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = `report-team-geco-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   setTimeout(() => { URL.revokeObjectURL(link.href); link.remove(); }, 1000);
-  toast('Report scaricato: si apre con Excel.');
 }
 
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && bellOpen) { bellOpen = false; render(); } });

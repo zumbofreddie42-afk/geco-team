@@ -2,7 +2,7 @@
 //   - to each person: "scade domani" for their open tasks due tomorrow
 //   - to the administrators: tasks that went late, projects due within 7 days
 // Protected by CRON_SECRET: Vercel sends it automatically as "Authorization: Bearer <CRON_SECRET>".
-import { adminClient, deliver, romeDay, send } from './_lib.js';
+import { adminClient, deliver, romeDay, saveBackup, send } from './_lib.js';
 
 export default async function handler(req, res) {
   const secret = process.env.CRON_SECRET;
@@ -48,7 +48,10 @@ export default async function handler(req, res) {
       const { data: inserted } = await db.from('notifications').insert(notes).select('id');
       result = await deliver(db, (inserted || []).map((r) => r.id));
     }
-    return send(res, 200, { created: notes.length, ...result });
+    // Weekly copy of all data on Mondays (the free Supabase plan has no automatic backups).
+    let backup = null;
+    if (new Date(`${today}T12:00:00Z`).getUTCDay() === 1) backup = await saveBackup(db, today).catch((e) => `errore: ${e.message}`);
+    return send(res, 200, { created: notes.length, ...result, backup });
   } catch (e) {
     return send(res, 500, { error: e.message || 'Errore del server.' });
   }

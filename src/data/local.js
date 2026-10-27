@@ -208,6 +208,7 @@ export function createLocalApi() {
       commit();
     },
 
+    async downloadBackup() { requireAdmin(); return { app: 'geco-team', createdAt: new Date().toISOString(), trial: true, tables: structuredClone(db) }; },
     pushSupported: false,
     async savePushSubscription() { /* no push in trial mode */ },
     async reset() { db = seed(); commit(); },

@@ -166,6 +166,7 @@ export function createSupabaseApi({ url, anonKey, vapidPublicKey }) {
     async updateUser(id, patch) { check(await sb.from('profiles').update(patch).eq('id', id)); },
     async resetPassword(id, password) { await callApi('/api/users', 'PATCH', { id, password }); },
     async deleteUser(id) { await callApi('/api/users', 'DELETE', { id }); },
+    async downloadBackup() { return callApi('/api/backup', 'GET'); },
 
     pushSupported: !!vapidPublicKey && 'serviceWorker' in navigator && 'PushManager' in window,
     vapidPublicKey,

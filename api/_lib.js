@@ -4,11 +4,11 @@ import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
 
 const env = process.env;
-export const SUPABASE_URL = env.SUPABASE_URL || env.VITE_SUPABASE_URL;
 
 export function adminClient() {
-  if (!SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) throw new Error('Configurazione del server incompleta.');
-  return createClient(SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+  const url = env.SUPABASE_URL || env.VITE_SUPABASE_URL;
+  if (!url || !env.SUPABASE_SERVICE_ROLE_KEY) throw new Error('Configurazione del server incompleta.');
+  return createClient(url, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
 export function send(res, status, body) {
@@ -103,4 +103,33 @@ export async function deliver(db, ids) {
     }
   }
   return { push, email };
+}
+
+// ---------- backups ----------
+const BACKUP_TABLES = ['profiles', 'settings', 'projects', 'project_members', 'tasks', 'task_assignees', 'comments', 'memos', 'memo_recipients', 'activity_log'];
+const BUCKET = 'backups';
+const KEEP = 8;
+
+/** Every table the team works with, as one JSON object (notifications and phone subscriptions are left out). */
+export async function exportAll(db) {
+  const out = { app: 'geco-team', createdAt: new Date().toISOString(), tables: {} };
+  for (const t of BACKUP_TABLES) {
+    const { data, error } = await db.from(t).select('*');
+    if (error) throw new Error(`${t}: ${error.message}`);
+    out.tables[t] = data;
+  }
+  return out;
+}
+
+/** Saves a copy in a private Supabase Storage bucket and keeps only the latest KEEP copies. */
+export async function saveBackup(db, day) {
+  await db.storage.createBucket(BUCKET, { public: false }).catch(() => {});
+  const body = JSON.stringify(await exportAll(db));
+  const name = `backup-${day}.json`;
+  const { error } = await db.storage.from(BUCKET).upload(name, body, { contentType: 'application/json', upsert: true });
+  if (error) throw new Error(error.message);
+  const { data: files } = await db.storage.from(BUCKET).list('', { limit: 100, sortBy: { column: 'name', order: 'desc' } });
+  const old = (files || []).filter((f) => f.name.startsWith('backup-')).slice(KEEP).map((f) => f.name);
+  if (old.length) await db.storage.from(BUCKET).remove(old);
+  return name;
 }
